@@ -1,0 +1,20 @@
+apply plugin: 'java'
+apply plugin: 'idea'
+
+repositories {
+    jcenter()
+    maven {
+        url  "http://dl.bintray.com/eventreducer/org.eventreducer"
+    }
+
+}
+
+dependencies {
+    compile project(':eventreducer')
+    compile project(':eventreducer-json')
+
+    compile 'org.flywaydb:flyway-core:3.2.1'
+    compile 'org.postgresql:postgresql:9.4-1206-jdbc42'
+
+    testCompile "junit:junit:4.11"
+}
