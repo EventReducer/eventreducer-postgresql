@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.jsontype.TypeResolverBuilder;
 import lombok.SneakyThrows;
+import org.eventreducer.Command;
 import org.eventreducer.Event;
 import org.eventreducer.IndexFactory;
 import org.eventreducer.Journal;
@@ -28,8 +29,12 @@ public class PostgreSQLJournal extends Journal {
     private final DataSource dataSource;
     private final ObjectMapper objectMapper;
 
+    @SneakyThrows
     public PostgreSQLJournal(PhysicalTimeProvider physicalTimeProvider, DataSource dataSource) {
         super(physicalTimeProvider);
+
+        checkVersion(dataSource);
+
         Flyway flyway = new Flyway();
         flyway.setDataSource(dataSource);
         flyway.setLocations("migrations");
@@ -79,6 +84,22 @@ public class PostgreSQLJournal extends Journal {
         objectMapper.configure(MapperFeature.SORT_PROPERTIES_ALPHABETICALLY, true);
     }
 
+    private void checkVersion(DataSource dataSource) throws Exception {
+        Connection conn = dataSource.getConnection();
+
+        PreparedStatement preparedStatement = conn.prepareStatement("SHOW server_version");
+
+        ResultSet resultSet = preparedStatement.executeQuery();
+
+        resultSet.next();
+
+        if (new Version(resultSet.getString(1)).compareTo(new Version("9.5.0")) < 0) {
+            throw new Exception("PostgreSQL " + resultSet.getString(1) + " is too old, 9.5 is required");
+        }
+        preparedStatement.close();
+        conn.close();
+    }
+
 
     @Override
     @SneakyThrows
@@ -103,14 +124,23 @@ public class PostgreSQLJournal extends Journal {
 
     @Override
     @SneakyThrows
-    protected void journal(List<Event> events) {
+    protected void journal(Command command, List<Event> events) {
         Connection conn = dataSource.getConnection();
 
-        PreparedStatement preparedStatement = conn.prepareStatement("INSERT INTO journal (uuid, event) VALUES (?::UUID, ?::JSONB)");
+        PreparedStatement preparedStatement = conn.prepareStatement("INSERT INTO commands (uuid, command) VALUES (?::UUID, ?::JSONB)");
+
+        preparedStatement.setString(1, command.uuid().toString());
+        preparedStatement.setString(2, objectMapper.writeValueAsString(command));
+
+        preparedStatement.execute();
+        preparedStatement.close();
+
+        preparedStatement = conn.prepareStatement("INSERT INTO journal (uuid, event, command) VALUES (?::UUID, ?::JSONB, ?::UUID)");
 
         for (Event event : events) {
             preparedStatement.setString(1, event.uuid().toString());
             preparedStatement.setString(2, objectMapper.writeValueAsString(event));
+            preparedStatement.setString(3, command.uuid().toString());
             preparedStatement.addBatch();
         };
 
