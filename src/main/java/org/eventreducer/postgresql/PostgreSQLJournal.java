@@ -67,7 +67,11 @@ public class PostgreSQLJournal extends Journal {
 
         while (resultSet.next()) {
             Event event = objectMapper.readValue(resultSet.getString("event"), Event.class);
-            event.entitySerializer().index(indexFactory, event);
+            try {
+                event.entitySerializer().index(indexFactory, event);
+            } catch (Exception e) {
+                log.error("Error while processing event {}: {}", event.uuid(), e.getMessage());
+            }
         }
 
         preparedStatement.close();
