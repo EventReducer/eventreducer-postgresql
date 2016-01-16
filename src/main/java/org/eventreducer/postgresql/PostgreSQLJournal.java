@@ -127,25 +127,36 @@ public class PostgreSQLJournal extends Journal {
     protected void journal(Command command, List<Event> events) {
         Connection conn = dataSource.getConnection();
 
-        PreparedStatement preparedStatement = conn.prepareStatement("INSERT INTO commands (uuid, command) VALUES (?::UUID, ?::JSONB)");
+        conn.setAutoCommit(false);
 
-        preparedStatement.setString(1, command.uuid().toString());
-        preparedStatement.setString(2, objectMapper.writeValueAsString(command));
+        try {
 
-        preparedStatement.execute();
-        preparedStatement.close();
+            PreparedStatement preparedStatement = conn.prepareStatement("INSERT INTO commands (uuid, command) VALUES (?::UUID, ?::JSONB)");
 
-        preparedStatement = conn.prepareStatement("INSERT INTO journal (uuid, event, command) VALUES (?::UUID, ?::JSONB, ?::UUID)");
+            preparedStatement.setString(1, command.uuid().toString());
+            preparedStatement.setString(2, objectMapper.writeValueAsString(command));
 
-        for (Event event : events) {
-            preparedStatement.setString(1, event.uuid().toString());
-            preparedStatement.setString(2, objectMapper.writeValueAsString(event));
-            preparedStatement.setString(3, command.uuid().toString());
-            preparedStatement.addBatch();
-        };
+            preparedStatement.execute();
+            preparedStatement.close();
 
-        preparedStatement.executeBatch();
-        preparedStatement.close();
+            preparedStatement = conn.prepareStatement("INSERT INTO journal (uuid, event, command) VALUES (?::UUID, ?::JSONB, ?::UUID)");
+
+            for (Event event : events) {
+                preparedStatement.setString(1, event.uuid().toString());
+                preparedStatement.setString(2, objectMapper.writeValueAsString(event));
+                preparedStatement.setString(3, command.uuid().toString());
+                preparedStatement.addBatch();
+            }
+
+            preparedStatement.executeBatch();
+            preparedStatement.close();
+
+            conn.commit();
+        } catch (Exception e) {
+            conn.rollback();
+            conn.close();
+            throw e;
+        }
 
         conn.close();
     }
