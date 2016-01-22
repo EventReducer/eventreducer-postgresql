@@ -1,6 +1,8 @@
 package org.eventreducer.postgresql;
 
+import lombok.Setter;
 import lombok.SneakyThrows;
+import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
 import org.eventreducer.*;
 import org.eventreducer.hlc.PhysicalTimeProvider;
@@ -20,6 +22,8 @@ import java.util.UUID;
 public class PostgreSQLJournal extends Journal {
 
 
+    @Setter @Accessors(chain = true)
+    private int fetchSize = 1024;
     private final DataSource dataSource;
     private final ObjectMapper objectMapper;
 
@@ -169,11 +173,13 @@ public class PostgreSQLJournal extends Journal {
     @Override @SneakyThrows
     public Iterator<Event> eventIterator(Class<? extends Event> klass) {
         Connection conn = dataSource.getConnection();
+        conn.setAutoCommit(false);
 
         PreparedStatement preparedStatement = conn.prepareStatement("SELECT event FROM journal WHERE event->>'@class' = ?");
         preparedStatement.setString(1, klass.getName());
 
         ResultSet resultSet = preparedStatement.executeQuery();
+        resultSet.setFetchSize(fetchSize);
 
         return new ObjectIterator<>(resultSet, conn, klass);
     }
@@ -181,11 +187,13 @@ public class PostgreSQLJournal extends Journal {
     @Override @SneakyThrows
     public Iterator<Command> commandIterator(Class<? extends Command> klass) {
         Connection conn = dataSource.getConnection();
+        conn.setAutoCommit(false);
 
         PreparedStatement preparedStatement = conn.prepareStatement("SELECT command FROM commands WHERE command->>'@class' = ?");
         preparedStatement.setString(1, klass.getName());
 
         ResultSet resultSet = preparedStatement.executeQuery();
+        resultSet.setFetchSize(fetchSize);
 
         return new ObjectIterator<>(resultSet, conn, klass);
     }
