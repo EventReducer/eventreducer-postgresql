@@ -144,10 +144,11 @@ public class PostgreSQLJournal extends Journal {
 
     @Override
     @SneakyThrows
-    public long size() {
+    public long size(Class<? extends Identifiable> klass) {
         Connection conn = dataSource.getConnection();
 
-        PreparedStatement preparedStatement = conn.prepareStatement("SELECT count(uuid) FROM journal");
+        PreparedStatement preparedStatement = conn.prepareStatement("SELECT count(uuid) FROM journal WHERE event->>'@class' = ?");
+        preparedStatement.setString(1, klass.getName());
 
         ResultSet resultSet = preparedStatement.executeQuery();
 
@@ -156,7 +157,8 @@ public class PostgreSQLJournal extends Journal {
 
         preparedStatement.close();
 
-        preparedStatement = conn.prepareStatement("SELECT count(uuid) FROM commands");
+        preparedStatement = conn.prepareStatement("SELECT count(uuid) FROM commands  WHERE command->>'@class' = ?");
+        preparedStatement.setString(1, klass.getName());
 
         resultSet = preparedStatement.executeQuery();
         resultSet.next();
