@@ -13,10 +13,10 @@ import javax.sql.DataSource;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Optional;
-import java.util.UUID;
+import java.util.*;
+import java.util.function.Function;
+import java.util.stream.Stream;
+import java.util.stream.StreamSupport;
 
 @Slf4j
 public class PostgreSQLJournal extends Journal {
@@ -105,7 +105,7 @@ public class PostgreSQLJournal extends Journal {
 
     @Override
     @SneakyThrows
-    protected void journal(Command command, List<Event> events) {
+    protected long journal(Command command, Stream<Event> events) {
         Connection conn = dataSource.getConnection();
 
         conn.setAutoCommit(false);
@@ -120,26 +120,35 @@ public class PostgreSQLJournal extends Journal {
             preparedStatement.execute();
             preparedStatement.close();
 
-            preparedStatement = conn.prepareStatement("INSERT INTO journal (uuid, event, command) VALUES (?::UUID, ?::JSONB, ?::UUID)");
+            long count = events.map(new Function<Event, Event>() {
+                @Override
+                @SneakyThrows
+                public Event apply(Event event) {
 
-            for (Event event : events) {
-                preparedStatement.setString(1, event.uuid().toString());
-                preparedStatement.setString(2, objectMapper.writeValueAsString(event));
-                preparedStatement.setString(3, command.uuid().toString());
-                preparedStatement.addBatch();
-            }
+                    PreparedStatement stmt = conn.prepareStatement("INSERT INTO journal (uuid, event, command) VALUES (?::UUID, ?::JSONB, ?::UUID)");
 
-            preparedStatement.executeBatch();
-            preparedStatement.close();
+                    stmt.setString(1, event.uuid().toString());
+                    stmt.setString(2, objectMapper.writeValueAsString(event));
+                    stmt.setString(3, command.uuid().toString());
+                    stmt.addBatch();
+
+                    stmt.execute();
+                    stmt.close();
+
+                    return event;
+                }
+            }).count();
 
             conn.commit();
+
+            return count;
         } catch (Exception e) {
             conn.rollback();
             conn.close();
             throw e;
+        } finally {
+            conn.close();
         }
-
-        conn.close();
     }
 
     @Override
@@ -200,6 +209,21 @@ public class PostgreSQLJournal extends Journal {
         return new ObjectIterator<>(resultSet, conn, klass);
     }
 
+    @Override
+    @SneakyThrows
+    public Stream<Event> events(Command command) {
+        Connection conn = dataSource.getConnection();
+        conn.setAutoCommit(false);
+
+        PreparedStatement preparedStatement = conn.prepareStatement("SELECT event FROM journal WHERE command = ?::UUID");
+        preparedStatement.setString(1, command.uuid().toString());
+
+        ResultSet resultSet = preparedStatement.executeQuery();
+        resultSet.setFetchSize(fetchSize);
+
+        return StreamSupport.stream(Spliterators.spliteratorUnknownSize(new ObjectIterator<>(resultSet, conn, Event.class), Spliterator.ORDERED), false);
+    }
+
 
     class ObjectIterator<O> implements Iterator<O> {
 
@@ -227,6 +251,9 @@ public class PostgreSQLJournal extends Journal {
 
         @Override @SneakyThrows
         public boolean hasNext() {
+            if (resultSet.isClosed()) {
+                return false;
+            }
             boolean next = resultSet.next();
             if (!next) {
                 resultSet.close();
