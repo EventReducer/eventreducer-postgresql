@@ -4,7 +4,10 @@ import lombok.Setter;
 import lombok.SneakyThrows;
 import lombok.experimental.Accessors;
 import lombok.extern.slf4j.Slf4j;
-import org.eventreducer.*;
+import org.eventreducer.Command;
+import org.eventreducer.Event;
+import org.eventreducer.Identifiable;
+import org.eventreducer.Journal;
 import org.eventreducer.hlc.PhysicalTimeProvider;
 import org.eventreducer.json.ObjectMapper;
 import org.flywaydb.core.Flyway;
@@ -14,7 +17,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.util.*;
-import java.util.function.Function;
+import java.util.function.Consumer;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
 
@@ -117,32 +120,32 @@ public class PostgreSQLJournal extends Journal {
 
         try {
 
+            String commandUUID = command.uuid().toString();
+
             PreparedStatement preparedStatement = conn.prepareStatement("INSERT INTO commands (uuid, command) VALUES (?::UUID, ?::JSONB)");
 
-            preparedStatement.setString(1, command.uuid().toString());
+            preparedStatement.setString(1, commandUUID);
             preparedStatement.setString(2, objectMapper.writeValueAsString(command));
 
-            preparedStatement.execute();
+            preparedStatement.executeUpdate();
             preparedStatement.close();
 
-            long count = events.map(new Function<Event, Event>() {
+            PreparedStatement stmt = conn.prepareStatement("INSERT INTO journal (uuid, event, command) VALUES (?::UUID, ?::JSONB, ?::UUID)");
+
+            long count = events.peek(new Consumer<Event>() {
                 @Override
                 @SneakyThrows
-                public Event apply(Event event) {
-
-                    PreparedStatement stmt = conn.prepareStatement("INSERT INTO journal (uuid, event, command) VALUES (?::UUID, ?::JSONB, ?::UUID)");
+                public void accept(Event event) {
 
                     stmt.setString(1, event.uuid().toString());
                     stmt.setString(2, objectMapper.writeValueAsString(event));
-                    stmt.setString(3, command.uuid().toString());
-                    stmt.addBatch();
+                    stmt.setString(3, commandUUID);
 
-                    stmt.execute();
-                    stmt.close();
-
-                    return event;
+                    stmt.executeUpdate();
                 }
             }).count();
+
+            stmt.close();
 
             conn.commit();
 
