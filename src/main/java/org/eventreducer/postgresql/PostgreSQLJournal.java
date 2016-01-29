@@ -53,6 +53,8 @@ public class PostgreSQLJournal extends Journal {
         if (new Version(resultSet.getString(1)).compareTo(new Version("9.5.0")) < 0) {
             throw new Exception("PostgreSQL " + resultSet.getString(1) + " is too old, 9.5 is required");
         }
+
+        resultSet.close();
         preparedStatement.close();
         conn.close();
     }
@@ -69,11 +71,13 @@ public class PostgreSQLJournal extends Journal {
 
         while (resultSet.next()) {
             Event event = objectMapper.readValue(resultSet.getString("event"), Event.class);
+            resultSet.close();
             preparedStatement.close();
             conn.close();
             return Optional.of(event);
         }
 
+        resultSet.close();
         preparedStatement.close();
         conn.close();
 
@@ -92,6 +96,7 @@ public class PostgreSQLJournal extends Journal {
 
         while (resultSet.next()) {
             Command command = objectMapper.readValue(resultSet.getString("command"), Command.class);
+            resultSet.close();
             preparedStatement.close();
             conn.close();
             return Optional.of(command);
@@ -174,6 +179,7 @@ public class PostgreSQLJournal extends Journal {
 
         result += resultSet.getLong(1);
 
+        resultSet.close();
         preparedStatement.close();
         conn.close();
 
@@ -192,7 +198,7 @@ public class PostgreSQLJournal extends Journal {
         ResultSet resultSet = preparedStatement.executeQuery();
         resultSet.setFetchSize(fetchSize);
 
-        return new ObjectIterator<>(resultSet, conn, klass);
+        return new ObjectIterator<>(resultSet, preparedStatement, conn, klass);
     }
 
     @Override @SneakyThrows
@@ -206,7 +212,7 @@ public class PostgreSQLJournal extends Journal {
         ResultSet resultSet = preparedStatement.executeQuery();
         resultSet.setFetchSize(fetchSize);
 
-        return new ObjectIterator<>(resultSet, conn, klass);
+        return new ObjectIterator<>(resultSet, preparedStatement, conn, klass);
     }
 
     @Override
@@ -221,7 +227,7 @@ public class PostgreSQLJournal extends Journal {
         ResultSet resultSet = preparedStatement.executeQuery();
         resultSet.setFetchSize(fetchSize);
 
-        return StreamSupport.stream(Spliterators.spliteratorUnknownSize(new ObjectIterator<>(resultSet, conn, Event.class), Spliterator.ORDERED), false);
+        return StreamSupport.stream(Spliterators.spliteratorUnknownSize(new ObjectIterator<>(resultSet, preparedStatement, conn, Event.class), Spliterator.ORDERED), false);
     }
 
 
@@ -229,11 +235,13 @@ public class PostgreSQLJournal extends Journal {
 
 
         private final ResultSet resultSet;
+        private final PreparedStatement preparedStatement;
         private final Connection conn;
         private final Class<? extends Identifiable> klass;
 
-        public ObjectIterator(ResultSet resultSet, Connection conn, Class<? extends Identifiable> klass) {
+        public ObjectIterator(ResultSet resultSet, PreparedStatement preparedStatement, Connection conn, Class<? extends Identifiable> klass) {
             this.resultSet = resultSet;
+            this.preparedStatement = preparedStatement;
             this.conn = conn;
             this.klass = klass;
         }
@@ -242,6 +250,10 @@ public class PostgreSQLJournal extends Journal {
         protected void finalize() throws Throwable {
             if (!resultSet.isClosed()) {
                 resultSet.close();
+            }
+
+            if (!preparedStatement.isClosed()) {
+                preparedStatement.close();
             }
 
             if (!conn.isClosed()) {
@@ -256,6 +268,7 @@ public class PostgreSQLJournal extends Journal {
             }
             boolean next = resultSet.next();
             if (!next) {
+                preparedStatement.close();
                 resultSet.close();
                 conn.close();
             }
