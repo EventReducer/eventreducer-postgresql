@@ -234,19 +234,21 @@ public class PostgreSQLJournal extends Journal {
     }
 
 
-    class ObjectIterator<O> implements Iterator<O> {
+    static class ObjectIterator<O> implements Iterator<O> {
 
 
         private final ResultSet resultSet;
         private final PreparedStatement preparedStatement;
         private final Connection conn;
         private final Class<? extends Identifiable> klass;
+        private final ObjectMapper objectMapper;
 
         public ObjectIterator(ResultSet resultSet, PreparedStatement preparedStatement, Connection conn, Class<? extends Identifiable> klass) {
             this.resultSet = resultSet;
             this.preparedStatement = preparedStatement;
             this.conn = conn;
             this.klass = klass;
+            this.objectMapper = new ObjectMapper();
         }
 
         @Override
@@ -280,7 +282,7 @@ public class PostgreSQLJournal extends Journal {
 
         @Override @SneakyThrows
         public O next() {
-            O o = objectMapper.readValue(resultSet.getString(1), (Class<O>)klass);
+            O o = objectMapper.readValue(resultSet.getCharacterStream(1), (Class<O>)klass);
             return o;
         }
     }
