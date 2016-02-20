@@ -26,7 +26,6 @@ public class PostgreSQLJournal extends Journal {
 
 
     @Setter @Accessors(chain = true)
-    private int fetchSize = 1024;
     private final DataSource dataSource;
     private final ObjectMapper objectMapper;
 
@@ -199,7 +198,6 @@ public class PostgreSQLJournal extends Journal {
         preparedStatement.setString(1, klass.getName());
 
         ResultSet resultSet = preparedStatement.executeQuery();
-        resultSet.setFetchSize(fetchSize);
 
         return new ObjectIterator<>(resultSet, preparedStatement, conn, klass);
     }
@@ -213,7 +211,6 @@ public class PostgreSQLJournal extends Journal {
         preparedStatement.setString(1, klass.getName());
 
         ResultSet resultSet = preparedStatement.executeQuery();
-        resultSet.setFetchSize(fetchSize);
 
         return new ObjectIterator<>(resultSet, preparedStatement, conn, klass);
     }
@@ -228,7 +225,6 @@ public class PostgreSQLJournal extends Journal {
         preparedStatement.setString(1, command.uuid().toString());
 
         ResultSet resultSet = preparedStatement.executeQuery();
-        resultSet.setFetchSize(fetchSize);
 
         return StreamSupport.stream(Spliterators.spliteratorUnknownSize(new ObjectIterator<>(resultSet, preparedStatement, conn, Event.class), Spliterator.ORDERED), false);
     }
