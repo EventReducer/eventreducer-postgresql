@@ -1,6 +1,8 @@
 package migrations;
 
 import lombok.extern.slf4j.Slf4j;
+import org.eventreducer.Command;
+import org.eventreducer.Event;
 import org.eventreducer.Serializable;
 import org.eventreducer.json.ObjectMapper;
 import org.flywaydb.core.api.migration.jdbc.JdbcMigration;
@@ -34,7 +36,8 @@ public class V6_1__Convert_Commands_To_Payloads implements JdbcMigration {
 
         Map<String, Class<? extends Serializable>> klasses = new HashMap<>();
 
-        PreparedStatement update = connection.prepareStatement("UPDATE commands SET payload = ? WHERE uuid = ?::uuid");
+        PreparedStatement update = connection.prepareStatement("UPDATE commands SET payload = ?, hash = ?, created_at = ?, trace = ?::JSONB WHERE uuid = ?::uuid");
+        com.fasterxml.jackson.databind.ObjectMapper traceMapper = new com.fasterxml.jackson.databind.ObjectMapper();
 
         while (resultSet.next()) {
             l++;
@@ -53,7 +56,10 @@ public class V6_1__Convert_Commands_To_Payloads implements JdbcMigration {
             byte[] bytes = Arrays.copyOfRange(buffer.array(), 0, buffer.position());
 
             update.setBytes(1, bytes);
-            update.setString(2, resultSet.getString(1));
+            update.setBytes(2, o.entitySerializer().hash());
+            update.setLong(3, ((Command)o).timestamp().ntpValue());
+            update.setString(4, traceMapper.writeValueAsString(((Command)o).trace()));
+            update.setString(5, resultSet.getString(1));
             update.addBatch();
 
             if (l % pct == 0) {

@@ -28,11 +28,11 @@ public class PostgreSQLJournal extends Journal {
 
     @Accessors(chain = true)
     private final DataSource dataSource;
-    private final ObjectMapper objectMapper;
 
     private Map<String, Serializer<Serializable>> classMap = new HashMap<>();
 
     private AtomicBoolean dirty = new AtomicBoolean(false);
+    private com.fasterxml.jackson.databind.ObjectMapper traceMapper;
 
     @SneakyThrows
     public PostgreSQLJournal(PhysicalTimeProvider physicalTimeProvider, DataSource dataSource) {
@@ -45,7 +45,7 @@ public class PostgreSQLJournal extends Journal {
         flyway.setLocations("migrations");
         flyway.migrate();
         this.dataSource = dataSource;
-        this.objectMapper = new ObjectMapper();
+        traceMapper = new com.fasterxml.jackson.databind.ObjectMapper();
     }
 
     @Override
@@ -117,19 +117,25 @@ public class PostgreSQLJournal extends Journal {
     public Optional<Command> findCommand(UUID uuid) {
         Connection conn = dataSource.getConnection();
 
-        PreparedStatement preparedStatement = conn.prepareStatement("SELECT command FROM commands WHERE uuid::text = ?");
+        PreparedStatement preparedStatement = conn.prepareStatement("SELECT hash, payload FROM commands WHERE uuid = ?::uuid");
         preparedStatement.setString(1, uuid.toString());
 
         ResultSet resultSet = preparedStatement.executeQuery();
 
         while (resultSet.next()) {
-            Command command = objectMapper.readValue(resultSet.getString("command"), Command.class);
+            Serializer<Serializable> entitySerializer = classMap.get(BaseEncoding.base16().encode(resultSet.getBytes(1)));
+            byte[] payload = resultSet.getBytes(2);
+            ByteBuffer buf = ByteBuffer.allocate(payload.length);
+            buf.put(payload);
+            buf.rewind();
+            Command cmd = (Command) entitySerializer.deserialize(buf);
             resultSet.close();
             preparedStatement.close();
             conn.close();
-            return Optional.of(command);
+            return Optional.of(cmd);
         }
 
+        resultSet.close();
         preparedStatement.close();
         conn.close();
 
@@ -155,7 +161,7 @@ public class PostgreSQLJournal extends Journal {
             preparedStatement.setBytes(2, command.entitySerializer().hash());
             preparedStatement.setBytes(3, buffer.array());
             preparedStatement.setLong(4, command.timestamp().ntpValue());
-            preparedStatement.setString(5, new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(command.trace()));
+            preparedStatement.setString(5, traceMapper.writeValueAsString(command.trace()));
 
             preparedStatement.executeUpdate();
             preparedStatement.close();
