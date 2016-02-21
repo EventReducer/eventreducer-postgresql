@@ -13,6 +13,8 @@ dependencies {
     compile project(':eventreducer')
     compile project(':eventreducer-json')
 
+    compile 'com.google.guava:guava:18.0'
+
     compile 'org.flywaydb:flyway-core:3.2.1'
     compile 'org.postgresql:postgresql:9.4-1206-jdbc42'
 

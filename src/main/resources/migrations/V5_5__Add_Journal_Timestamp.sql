@@ -1,0 +1,1 @@
+ALTER TABLE journal ADD COLUMN created_at BIGINT;

@@ -1,0 +1,1 @@
+CREATE INDEX journal_hash_idx ON journal(hash);
