@@ -174,13 +174,10 @@ public class PostgreSQLJournal extends Journal {
                 public void accept(Event event) {
                     ByteBuffer buffer = ByteBuffer.allocate(event.entitySerializer().size(event));
                     event.entitySerializer().serialize(event, buffer);
-                    int position = buffer.position();
-                    buffer.rewind();
-                    byte[] payload = Arrays.copyOfRange(buffer.array(), 0, position);
 
                     stmt.setString(1, event.uuid().toString());
                     stmt.setBytes(2, event.entitySerializer().hash());
-                    stmt.setBytes(3, payload);
+                    stmt.setBytes(3, buffer.array());
                     stmt.setString(4, commandUUID);
                     stmt.setLong(5, event.timestamp().ntpValue());
 
