@@ -17,7 +17,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Slf4j
-public class V5_3__Convert_Events_To_Payloads implements JdbcMigration {
+public class V5_4__Convert_Events_To_Payloads implements JdbcMigration {
     @Override
     public void migrate(Connection connection) throws Exception {
         ResultSet count = connection.prepareStatement("SELECT count(uuid) FROM journal").executeQuery();
@@ -48,7 +48,7 @@ public class V5_3__Convert_Events_To_Payloads implements JdbcMigration {
                 klasses.put(className, aClass);
             }
 
-            Serializable o = objectMapper.readValue(resultSet.getCharacterStream(2), aClass);
+            Serializable o = objectMapper.readValue(resultSet.getString(2), aClass);
             ByteBuffer buffer = ByteBuffer.allocate(o.entitySerializer().size(o));
             o.entitySerializer().serialize(o, buffer);
             byte[] bytes = Arrays.copyOfRange(buffer.array(), 0, buffer.position());
