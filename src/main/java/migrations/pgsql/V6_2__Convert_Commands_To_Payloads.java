@@ -1,6 +1,7 @@
-package migrations;
+package migrations.pgsql;
 
 import lombok.extern.slf4j.Slf4j;
+import org.eventreducer.Command;
 import org.eventreducer.Event;
 import org.eventreducer.Serializable;
 import org.eventreducer.json.ObjectMapper;
@@ -17,25 +18,26 @@ import java.util.HashMap;
 import java.util.Map;
 
 @Slf4j
-public class V5_4__Convert_Events_To_Payloads implements JdbcMigration {
+public class V6_2__Convert_Commands_To_Payloads implements JdbcMigration {
     @Override
     public void migrate(Connection connection) throws Exception {
-        ResultSet count = connection.prepareStatement("SELECT count(uuid) FROM journal").executeQuery();
+        ResultSet count = connection.prepareStatement("SELECT count(uuid) FROM commands").executeQuery();
         count.next();
         long cnt = count.getLong(1);
         long pct = cnt / 100;
 
-        PreparedStatement preparedStatement = connection.prepareStatement("SELECT uuid::text, event, event->>'@class' FROM journal");
+        PreparedStatement preparedStatement = connection.prepareStatement("SELECT uuid::text, command, command->>'@class' FROM commands");
         ResultSet resultSet = preparedStatement.executeQuery();
         ObjectMapper objectMapper = new ObjectMapper();
 
         long l = 0;
         long completed = 0;
-        log.info("Converting {} events", cnt);
+        log.info("Converting {} commands", cnt);
 
         Map<String, Class<? extends Serializable>> klasses = new HashMap<>();
 
-        PreparedStatement update = connection.prepareStatement("UPDATE journal SET payload = ?, hash = ?, created_at = ? WHERE uuid = ?::uuid");
+        PreparedStatement update = connection.prepareStatement("UPDATE commands SET payload = ?, hash = ?, created_at = ?, trace = ?::JSONB WHERE uuid = ?::uuid");
+        com.fasterxml.jackson.databind.ObjectMapper traceMapper = new com.fasterxml.jackson.databind.ObjectMapper();
 
         while (resultSet.next()) {
             l++;
@@ -55,8 +57,9 @@ public class V5_4__Convert_Events_To_Payloads implements JdbcMigration {
 
             update.setBytes(1, bytes);
             update.setBytes(2, o.entitySerializer().hash());
-            update.setLong(3, ((Event)o).timestamp().ntpValue());
-            update.setString(4, resultSet.getString(1));
+            update.setLong(3, ((Command)o).timestamp().ntpValue());
+            update.setString(4, traceMapper.writeValueAsString(((Command)o).trace()));
+            update.setString(5, resultSet.getString(1));
             update.addBatch();
 
             if (l % pct == 0) {

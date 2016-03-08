@@ -42,7 +42,7 @@ public class PostgreSQLJournal extends Journal {
 
         Flyway flyway = new Flyway();
         flyway.setDataSource(dataSource);
-        flyway.setLocations("migrations");
+        flyway.setLocations("migrations/pgsql");
         flyway.migrate();
         this.dataSource = dataSource;
         traceMapper = new com.fasterxml.jackson.databind.ObjectMapper();
