@@ -157,6 +157,8 @@ public class PostgreSQLJournal extends Journal {
             PreparedStatement preparedStatement = conn.prepareStatement("INSERT INTO commands (uuid, hash, payload, created_at, trace) VALUES (?::UUID, ?, ?, ?, ?::JSONB)");
 
             ByteBuffer buffer = ByteBuffer.allocate(command.entitySerializer().size(command));
+            command.entitySerializer().serialize(command, buffer);
+
             preparedStatement.setString(1, commandUUID);
             preparedStatement.setBytes(2, command.entitySerializer().hash());
             preparedStatement.setBytes(3, buffer.array());
